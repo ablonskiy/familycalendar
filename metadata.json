@@ -1,0 +1,5 @@
+{
+  "name": "Family Calendar Bot",
+  "description": "Telegram бот для управления семейным Google календарем с помощью ИИ",
+  "requestFramePermissions": []
+}

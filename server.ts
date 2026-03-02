@@ -211,9 +211,12 @@ async function startServer() {
     };
 
     bot.use(async (ctx, next) => {
-      console.log(`Incoming message from user ${ctx.from?.id} in chat ${ctx.chat?.id} (${ctx.chat?.type}): ${ctx.message && 'text' in ctx.message ? ctx.message.text : '[not text]'}`);
       if (!ctx.from || !ctx.chat) return;
-      
+
+      if (ctx.chat.type === 'private') {
+        console.log(`Incoming message from user ${ctx.from.id} in chat ${ctx.chat.id} (${ctx.chat.type}): ${ctx.message && 'text' in ctx.message ? ctx.message.text : '[not text]'}`);
+      }
+
       const isUserAllowed = allowedIds.includes(ctx.from.id);
       const isChatAllowed = allowedIds.includes(ctx.chat.id) || 
                             allowedIds.includes(Math.abs(ctx.chat.id)) ||
@@ -302,6 +305,10 @@ async function startServer() {
       // Strictly require mention in groups to save tokens, even if chat is allowed
       if (ctx.chat.type !== 'private' && botUsername && !message.includes(`@${botUsername}`)) {
         return;
+      }
+
+      if (ctx.chat.type !== 'private') {
+        console.log(`Incoming message from user ${ctx.from.id} in chat ${ctx.chat.id} (${ctx.chat.type}): ${message}`);
       }
 
       const cleanMessage = botUsername ? message.replace(`@${botUsername}`, "").trim() : message.trim();

@@ -41,6 +41,16 @@ async function startServer() {
   console.log("OPENROUTER_API_KEY present:", !!process.env.OPENROUTER_API_KEY);
 
   // 1. API ROUTES FIRST
+  app.use((req, res, next) => {
+    // Collapse multiple slashes (e.g. //api -> /api)
+    req.url = req.url.replace(/\/+/g, '/');
+    
+    if (process.env.NODE_ENV === "production") {
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    }
+    next();
+  });
+
   app.get("/api/health", (req, res) => {
     res.json({ 
       status: "ok", 
@@ -423,7 +433,22 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static("dist"));
+    const path = await import('path');
+    const distPath = path.join(process.cwd(), "dist");
+    
+    console.log(`Production mode: serving static files from ${distPath}`);
+    
+    // Serve static files from dist
+    app.use(express.static(distPath));
+    
+    // SPA fallback: serve index.html for any unknown routes
+    app.get("*", (req, res) => {
+      // Don't fallback for API routes
+      if (req.url.startsWith('/api/')) {
+        return res.status(404).json({ error: "API route not found" });
+      }
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
 
   app.listen(PORT, "0.0.0.0", () => {

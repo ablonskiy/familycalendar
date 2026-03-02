@@ -12,9 +12,16 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
+  const apiFetch = (path: string, options?: RequestInit) => {
+    const baseUrl = import.meta.env.BASE_URL || '/';
+    const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    const normalizedPath = path.startsWith('/') ? path.substring(1) : path;
+    return fetch(`${normalizedBase}${normalizedPath}`, options);
+  };
+
   const checkAuth = async () => {
     try {
-      const res = await fetch('/api/auth/check');
+      const res = await apiFetch('api/auth/check');
       const data = await res.json();
       setIsAuthenticated(data.authenticated);
       if (data.authenticated) {
@@ -30,7 +37,7 @@ export default function App() {
   const fetchStatus = async () => {
     try {
       // First, check health to see if API is responding at all
-      const healthRes = await fetch('/api/health');
+      const healthRes = await apiFetch('api/health');
       if (!healthRes.ok) {
         const text = await healthRes.text();
         console.error('API Health check failed:', text);
@@ -41,8 +48,8 @@ export default function App() {
       console.log('Health data:', healthData);
 
       const [statusRes, botRes] = await Promise.all([
-        fetch('/api/status'),
-        fetch('/api/bot-info')
+        apiFetch('api/status'),
+        apiFetch('api/bot-info')
       ]);
       
       if (!statusRes.ok || !botRes.ok) {
@@ -57,8 +64,8 @@ export default function App() {
 
       if (statusData.connected) {
         const [calRes, settingsRes] = await Promise.all([
-          fetch('/api/calendars'),
-          fetch('/api/settings/calendar')
+          apiFetch('api/calendars'),
+          apiFetch('api/settings/calendar')
         ]);
         if (calRes.ok) setCalendars(await calRes.json());
         if (settingsRes.ok) {
@@ -95,7 +102,7 @@ export default function App() {
 
   const handleConnect = async () => {
     try {
-      const res = await fetch('/api/auth/url');
+      const res = await apiFetch('api/auth/url');
       const data = await res.json();
       
       if (!res.ok) {
@@ -112,7 +119,7 @@ export default function App() {
   const handleCalendarChange = async (id: string) => {
     setSelectedCalendarId(id);
     try {
-      await fetch('/api/settings/calendar', {
+      await apiFetch('api/settings/calendar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ calendarId: id })
@@ -126,7 +133,7 @@ export default function App() {
     e.preventDefault();
     setLoginError('');
     try {
-      const res = await fetch('/api/login', {
+      const res = await apiFetch('api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
@@ -144,7 +151,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/logout', { method: 'POST' });
+    await apiFetch('api/logout', { method: 'POST' });
     setIsAuthenticated(false);
   };
 
@@ -326,6 +333,15 @@ export default function App() {
         </h3>
         <div className="text-[11px] text-zinc-400 leading-relaxed text-left bg-white/50 p-6 rounded-3xl border border-zinc-100 space-y-4 shadow-sm">
           <section>
+            <h4 className="font-bold text-zinc-600 mb-1 uppercase tracking-wider">0. Установка Node.js (на сервере)</h4>
+            <p>Если <code>npm</code> не найден, установите Node.js (рекомендуется v20+):</p>
+            <pre className="bg-zinc-100 p-2 rounded mt-1 overflow-x-auto">
+              curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -{"\n"}
+              sudo apt-get install -y nodejs
+            </pre>
+          </section>
+
+          <section>
             <h4 className="font-bold text-zinc-600 mb-1 uppercase tracking-wider">1. Подготовка (Git)</h4>
             <p>Скачайте проект и инициализируйте репозиторий на своем сервере (например, в <code>/var/www/familybot</code>):</p>
             <pre className="bg-zinc-100 p-2 rounded mt-1 overflow-x-auto">
@@ -358,9 +374,9 @@ export default function App() {
 
           <section>
             <h4 className="font-bold text-zinc-600 mb-1 uppercase tracking-wider">4. Запуск (PM2)</h4>
-            <p>Для фоновой работы используйте PM2:</p>
+            <p>Для фоновой работы используйте PM2 и глобальный интерпретатор tsx:</p>
             <pre className="bg-zinc-100 p-2 rounded mt-1 overflow-x-auto">
-              npm install -g pm2{"\n"}
+              npm install -g pm2 tsx{"\n"}
               pm2 start server.ts --name familybot --interpreter tsx{"\n"}
               pm2 save
             </pre>
@@ -368,14 +384,25 @@ export default function App() {
 
           <section>
             <h4 className="font-bold text-zinc-600 mb-1 uppercase tracking-wider">5. Nginx (Reverse Proxy)</h4>
-            <p>Если бот в подпапке <code>/familybot</code>, добавьте в конфиг домена:</p>
+            <p>Если бот в подпапке <code>/familybot</code>, добавьте в конфиг домена (в блок <code>server</code> с портом 443):</p>
             <pre className="bg-zinc-100 p-2 rounded mt-1 overflow-x-auto">
-              location /familybot/ {"{"}{"\n"}
-              {"  "}proxy_pass http://localhost:3000/;{"\n"}
+              location ^~ /familybot {"{"}{"\n"}
+              {"  "}rewrite ^/familybot$ /familybot/ permanent;{"\n"}
+              {"  "}proxy_pass http://127.0.0.1:3000/;{"\n"}
               {"  "}proxy_set_header Host $host;{"\n"}
               {"  "}proxy_set_header X-Real-IP $remote_addr;{"\n"}
               {"}"}
             </pre>
+          </section>
+          <section className="bg-amber-50 p-3 rounded-xl border border-amber-100">
+            <h4 className="font-bold text-amber-700 mb-1 uppercase tracking-wider text-[10px]">⚠️ Если ошибка 404 Not Found</h4>
+            <ul className="list-disc ml-4 space-y-1 text-amber-800">
+              <li>Убедитесь, что в <code>.env</code> стоит <code>NODE_ENV=production</code></li>
+              <li>Проверьте, что <code>VITE_BASE_PATH=/familybot/</code> (со слешами!)</li>
+              <li>Используйте относительные пути в API (без <code>/</code> в начале)</li>
+              <li>После изменения <code>.env</code> <strong>обязательно</strong> заново запустите <code>npm run build</code></li>
+              <li>Перезапустите бота: <code>pm2 restart familybot</code></li>
+            </ul>
           </section>
         </div>
       </div>

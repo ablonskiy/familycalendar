@@ -1,8 +1,9 @@
-node_modules/
-build/
-dist/
-coverage/
-.DS_Store
+.env
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
 *.log
-.env*
-!.env.example
+*.db
+*.sqlite3

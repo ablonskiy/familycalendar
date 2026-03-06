@@ -5,7 +5,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import "dotenv/config";
 import { parseEventMessage, refineEventMessage } from "./src/services/aiService";
-import { getAuthUrl, setTokens, addCalendarEvent, listCalendars, getEvents } from "./src/services/calendarService";
+import { getAuthUrl, setTokens, addCalendarEvent, listCalendars, getEvents, getCalendarTimezone } from "./src/services/calendarService";
 import db from "./src/db";
 import { formatInTimeZone } from 'date-fns-tz';
 
@@ -254,8 +254,8 @@ async function startServer() {
         try {
           ctx.reply("Обновляю данные... 🔄");
           const now = new Date();
-          const tz = getValidTz(process.env.TIMEZONE || 'Europe/Moscow');
-          
+          const tz = await getCalendarTimezone();
+
           let currentTime;
           try {
             currentTime = formatInTimeZone(now, tz, 'yyyy-MM-dd HH:mm:ss');
@@ -316,8 +316,8 @@ async function startServer() {
 
       try {
         const now = new Date();
-        const tz = getValidTz(process.env.TIMEZONE || 'Europe/Moscow');
-        console.log(`Timezone debug: using "${tz}"`);
+        const tz = await getCalendarTimezone();
+        console.log(`Timezone debug: using "${tz}" (from Google Calendar)`);
         
         let currentTime;
         try {

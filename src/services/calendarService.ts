@@ -55,6 +55,31 @@ export async function setTokens(code: string) {
   return tokens;
 }
 
+export async function getCalendarTimezone(): Promise<string> {
+  const row = db.prepare('SELECT tokens FROM google_tokens WHERE user_email = ?').get('primary') as any;
+  if (!row) return 'Europe/Belgrade';
+
+  const client = getOAuthClient();
+  const tokens = JSON.parse(row.tokens);
+  client.setCredentials(tokens);
+
+  const calendar = google.calendar({ version: 'v3', auth: client });
+  const calendarSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('calendar_id') as any;
+  const calendarId = calendarSetting ? calendarSetting.value : 'primary';
+
+  try {
+    const res = await calendar.calendars.get({ calendarId });
+    const tz = res.data.timeZone;
+    if (tz) {
+      console.log(`Calendar timezone: ${tz}`);
+      return tz;
+    }
+  } catch (e) {
+    console.error('Failed to get calendar timezone, falling back to Europe/Belgrade:', e);
+  }
+  return 'Europe/Belgrade';
+}
+
 export async function addCalendarEvent(eventData: any) {
   const row = db.prepare('SELECT tokens FROM google_tokens WHERE user_email = ?').get('primary') as any;
   if (!row) throw new Error('Google Calendar not connected. Please connect via dashboard.');
@@ -69,39 +94,26 @@ export async function addCalendarEvent(eventData: any) {
   const calendarSetting = db.prepare('SELECT value FROM settings WHERE key = ?').get('calendar_id') as any;
   const calendarId = calendarSetting ? calendarSetting.value : 'primary';
 
-  // Helper to validate and fix timezone
-  const getValidTz = (input: string) => {
-    const clean = input.replace(/['"]/g, '').trim();
-    const mapping: Record<string, string> = {
-      'Belgrade': 'Europe/Belgrade',
-      'Moscow': 'Europe/Moscow',
-      'London': 'Europe/London',
-      'Paris': 'Europe/Paris',
-      'Berlin': 'Europe/Berlin',
-      'Kiev': 'Europe/Kiev',
-      'Kyiv': 'Europe/Kiev',
-      'Dubai': 'Asia/Dubai',
-    };
-    if (mapping[clean]) return mapping[clean];
-    try {
-      Intl.DateTimeFormat(undefined, { timeZone: clean });
-      return clean;
-    } catch (e) {
-      return 'UTC';
-    }
-  };
+  // Read timezone directly from Google Calendar — no env var needed
+  const calInfo = await calendar.calendars.get({ calendarId });
+  const tz = calInfo.data.timeZone || 'Europe/Belgrade';
+  console.log(`Using calendar timezone for event: ${tz}`);
 
-  const tz = getValidTz(process.env.TIMEZONE || 'Europe/Moscow');
-
-  // We send the date and time string directly without 'Z' 
-  // and specify the timeZone so Google interprets it correctly in the user's local time.
+  // Build start datetime as a naive local time string
   const startDateTime = `${eventData.date}T${eventData.time}:00`;
-  
-  // Calculate end time safely by treating input as UTC for the duration math, 
-  // then stripping the 'Z' back off.
-  const startDate = new Date(`${startDateTime}Z`);
-  const endDate = new Date(startDate.getTime() + eventData.durationMinutes * 60000);
-  const endDateTime = endDate.toISOString().split('.')[0].replace('Z', '');
+
+  // Calculate end time via direct arithmetic on local time (avoids UTC conversion bugs)
+  const [h, m] = eventData.time.split(':').map(Number);
+  const totalMins = h * 60 + m + eventData.durationMinutes;
+  const endH = Math.floor(totalMins / 60) % 24;
+  const endM = totalMins % 60;
+  let endDateStr = eventData.date;
+  if (totalMins >= 24 * 60) {
+    const d = new Date(`${eventData.date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + Math.floor(totalMins / (24 * 60)));
+    endDateStr = d.toISOString().split('T')[0];
+  }
+  const endDateTime = `${endDateStr}T${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`;
 
   const event = {
     summary: eventData.title,

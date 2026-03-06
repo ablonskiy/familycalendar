@@ -127,6 +127,13 @@ export async function addCalendarEvent(eventData: any) {
       dateTime: endDateTime,
       timeZone: tz,
     },
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: 'popup', minutes: 60 },
+        { method: 'popup', minutes: 30 },
+      ],
+    },
   };
 
   const res = await calendar.events.insert({
